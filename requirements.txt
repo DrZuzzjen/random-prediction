@@ -2,3 +2,6 @@ streamlit
 supabase
 requests
 python-dotenv
+plotly
+pandas
+numpy
