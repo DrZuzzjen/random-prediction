@@ -117,16 +117,19 @@ def get_user_analytics(_supabase: Client, email, game_type="1-99_range_10_number
             return None
             
         df = pd.DataFrame(runs.data)
-        df['created_at'] = pd.to_datetime(df['created_at'])
+        df['created_at'] = pd.to_datetime(df['created_at'], utc=True)
         
         # Calculate user stats
+        now_utc = pd.Timestamp.now(tz='UTC')
+        week_ago = now_utc - timedelta(days=7)
+        
         user_stats = {
             'total_games': len(df),
             'best_score': df['score'].max(),
             'avg_score': df['score'].mean(),
             'latest_score': df['score'].iloc[0],
             'first_game': df['created_at'].min(),
-            'games_last_week': len(df[df['created_at'] > datetime.now() - timedelta(days=7)]),
+            'games_last_week': len(df[df['created_at'] > week_ago]),
             'score_trend': df['score'].tolist()[-10:] if len(df) >= 10 else df['score'].tolist()
         }
         
