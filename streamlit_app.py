@@ -1,151 +1,187 @@
 import streamlit as st
-import pandas as pd
-import math
-from pathlib import Path
+import os
+from dotenv import load_dotenv
+from supabase import create_client, Client
+from api_client import RandomOrgClient
+
+load_dotenv()
+
+@st.cache_resource
+def init_supabase():
+    """Initialize Supabase client"""
+    url = os.getenv("SUPABASE_URL")
+    key = os.getenv("SUPABASE_SECRET_KEY")
+    return create_client(url, key)
+
+@st.cache_resource
+def init_random_client():
+    """Initialize Random.org client"""
+    return RandomOrgClient()
+
+def calculate_score(user_numbers, random_numbers):
+    """Calculate how many numbers match"""
+    matches = sum(1 for num in user_numbers if num in random_numbers)
+    return matches
+
+def get_leaderboard(supabase: Client, game_type="1-99_range_10_numbers"):
+    """Fetch leaderboard from database"""
+    try:
+        result = supabase.table('leaderboard').select('name, best_score').eq('game_type', game_type).order('best_score', desc=True).limit(10).execute()
+        return result.data
+    except Exception as e:
+        st.error(f"Error fetching leaderboard: {e}")
+        return []
+
+def save_score(supabase: Client, name, email, score, game_type="1-99_range_10_numbers"):
+    """Save or update user score"""
+    try:
+        # Try to get existing record
+        existing = supabase.table('leaderboard').select('*').eq('email', email).eq('game_type', game_type).execute()
+        
+        if existing.data:
+            # Update if new score is better
+            current_best = existing.data[0]['best_score']
+            total_games = existing.data[0]['total_games_played'] + 1
+            
+            if score > current_best:
+                supabase.table('leaderboard').update({
+                    'name': name,
+                    'best_score': score,
+                    'total_games_played': total_games
+                }).eq('email', email).eq('game_type', game_type).execute()
+                return True, "New high score saved!"
+            else:
+                supabase.table('leaderboard').update({
+                    'total_games_played': total_games
+                }).eq('email', email).eq('game_type', game_type).execute()
+                return False, f"Score recorded. Your best is still {current_best}/10"
+        else:
+            # Insert new record
+            supabase.table('leaderboard').insert({
+                'name': name,
+                'email': email,
+                'best_score': score,
+                'total_games_played': 1,
+                'game_type': game_type
+            }).execute()
+            return True, "Score saved to leaderboard!"
+            
+    except Exception as e:
+        st.error(f"Error saving score: {e}")
+        return False, "Error saving score"
 
 # Set the title and favicon that appear in the Browser's tab bar.
 st.set_page_config(
-    page_title='GDP dashboard',
-    page_icon=':earth_americas:', # This is an emoji shortcode. Could be a URL too.
+    page_title="Random Prediction Game",
+    page_icon="🎯",
+    layout="centered"
 )
 
-# -----------------------------------------------------------------------------
-# Declare some useful functions.
+st.title("🎯 Random Prediction Game")
+st.markdown("### Predict 10 numbers between 1-99 and see how many match!")
 
-@st.cache_data
-def get_gdp_data():
-    """Grab GDP data from a CSV file.
+# Initialize clients
+supabase = init_supabase()
+random_client = init_random_client()
 
-    This uses caching to avoid having to read the file every time. If we were
-    reading from an HTTP endpoint instead of a file, it's a good idea to set
-    a maximum age to the cache with the TTL argument: @st.cache_data(ttl='1d')
-    """
+# Game state
+if 'game_played' not in st.session_state:
+    st.session_state.game_played = False
+if 'user_numbers' not in st.session_state:
+    st.session_state.user_numbers = []
+if 'random_numbers' not in st.session_state:
+    st.session_state.random_numbers = []
+if 'score' not in st.session_state:
+    st.session_state.score = 0
 
-    # Instead of a CSV on disk, you could read from an HTTP endpoint here too.
-    DATA_FILENAME = Path(__file__).parent/'data/gdp_data.csv'
-    raw_gdp_df = pd.read_csv(DATA_FILENAME)
+# Sidebar - Leaderboard
+with st.sidebar:
+    st.header("🏆 Leaderboard")
+    leaderboard = get_leaderboard(supabase)
+    if leaderboard:
+        for i, entry in enumerate(leaderboard, 1):
+            st.write(f"{i}. **{entry['name']}** - {entry['best_score']}/10")
+    else:
+        st.write("No scores yet!")
 
-    MIN_YEAR = 1960
-    MAX_YEAR = 2022
+# Main game interface
+if not st.session_state.game_played:
+    st.markdown("#### Enter your 10 predictions (1-99):")
+    
+    # Input fields for 10 numbers
+    cols = st.columns(5)
+    user_numbers = []
+    
+    for i in range(10):
+        col_idx = i % 5
+        with cols[col_idx]:
+            num = st.number_input(
+                f"#{i+1}", 
+                min_value=1, 
+                max_value=99, 
+                value=1, 
+                key=f"num_{i}"
+            )
+            user_numbers.append(num)
+    
+    if st.button("🎲 Generate Random Numbers & Calculate Score", type="primary"):
+        try:
+            with st.spinner("Generating random numbers..."):
+                random_numbers = random_client.generate_random_numbers(10, 1, 99)
+                score = calculate_score(user_numbers, random_numbers)
+                
+                st.session_state.user_numbers = user_numbers
+                st.session_state.random_numbers = random_numbers
+                st.session_state.score = score
+                st.session_state.game_played = True
+                st.rerun()
+                
+        except Exception as e:
+            st.error(f"Error generating random numbers: {e}")
 
-    # The data above has columns like:
-    # - Country Name
-    # - Country Code
-    # - [Stuff I don't care about]
-    # - GDP for 1960
-    # - GDP for 1961
-    # - GDP for 1962
-    # - ...
-    # - GDP for 2022
-    #
-    # ...but I want this instead:
-    # - Country Name
-    # - Country Code
-    # - Year
-    # - GDP
-    #
-    # So let's pivot all those year-columns into two: Year and GDP
-    gdp_df = raw_gdp_df.melt(
-        ['Country Code'],
-        [str(x) for x in range(MIN_YEAR, MAX_YEAR + 1)],
-        'Year',
-        'GDP',
-    )
-
-    # Convert years from string to integers
-    gdp_df['Year'] = pd.to_numeric(gdp_df['Year'])
-
-    return gdp_df
-
-gdp_df = get_gdp_data()
-
-# -----------------------------------------------------------------------------
-# Draw the actual page
-
-# Set the title that appears at the top of the page.
-'''
-# :earth_americas: GDP dashboard
-
-Browse GDP data from the [World Bank Open Data](https://data.worldbank.org/) website. As you'll
-notice, the data only goes to 2022 right now, and datapoints for certain years are often missing.
-But it's otherwise a great (and did I mention _free_?) source of data.
-'''
-
-# Add some spacing
-''
-''
-
-min_value = gdp_df['Year'].min()
-max_value = gdp_df['Year'].max()
-
-from_year, to_year = st.slider(
-    'Which years are you interested in?',
-    min_value=min_value,
-    max_value=max_value,
-    value=[min_value, max_value])
-
-countries = gdp_df['Country Code'].unique()
-
-if not len(countries):
-    st.warning("Select at least one country")
-
-selected_countries = st.multiselect(
-    'Which countries would you like to view?',
-    countries,
-    ['DEU', 'FRA', 'GBR', 'BRA', 'MEX', 'JPN'])
-
-''
-''
-''
-
-# Filter the data
-filtered_gdp_df = gdp_df[
-    (gdp_df['Country Code'].isin(selected_countries))
-    & (gdp_df['Year'] <= to_year)
-    & (from_year <= gdp_df['Year'])
-]
-
-st.header('GDP over time', divider='gray')
-
-''
-
-st.line_chart(
-    filtered_gdp_df,
-    x='Year',
-    y='GDP',
-    color='Country Code',
-)
-
-''
-''
-
-
-first_year = gdp_df[gdp_df['Year'] == from_year]
-last_year = gdp_df[gdp_df['Year'] == to_year]
-
-st.header(f'GDP in {to_year}', divider='gray')
-
-''
-
-cols = st.columns(4)
-
-for i, country in enumerate(selected_countries):
-    col = cols[i % len(cols)]
-
-    with col:
-        first_gdp = first_year[first_year['Country Code'] == country]['GDP'].iat[0] / 1000000000
-        last_gdp = last_year[last_year['Country Code'] == country]['GDP'].iat[0] / 1000000000
-
-        if math.isnan(first_gdp):
-            growth = 'n/a'
-            delta_color = 'off'
-        else:
-            growth = f'{last_gdp / first_gdp:,.2f}x'
-            delta_color = 'normal'
-
-        st.metric(
-            label=f'{country} GDP',
-            value=f'{last_gdp:,.0f}B',
-            delta=growth,
-            delta_color=delta_color
-        )
+else:
+    # Show results
+    st.success(f"🎉 Your Score: **{st.session_state.score}/10**")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.subheader("Your Predictions:")
+        st.write(st.session_state.user_numbers)
+        
+    with col2:
+        st.subheader("Random Numbers:")
+        st.write(st.session_state.random_numbers)
+    
+    # Show matches
+    matches = [num for num in st.session_state.user_numbers if num in st.session_state.random_numbers]
+    if matches:
+        st.info(f"✅ Matching numbers: {matches}")
+    else:
+        st.info("❌ No matches this time!")
+    
+    # Save score form
+    st.markdown("---")
+    st.subheader("💾 Save Your Score")
+    
+    with st.form("save_score"):
+        name = st.text_input("Your Name:", max_chars=50)
+        email = st.text_input("Your Email (private):", max_chars=100)
+        
+        if st.form_submit_button("Save Score"):
+            if name and email:
+                is_new_best, message = save_score(supabase, name, email, st.session_state.score)
+                if is_new_best:
+                    st.success(message)
+                else:
+                    st.info(message)
+            else:
+                st.error("Please enter both name and email")
+    
+    # Play again
+    if st.button("🔄 Play Again"):
+        st.session_state.game_played = False
+        st.session_state.user_numbers = []
+        st.session_state.random_numbers = []
+        st.session_state.score = 0
+        st.rerun()
