@@ -63,7 +63,8 @@ def show_game_tab(supabase: Client, random_client: RandomOrgClient):
 
     # Phase 1: Number input
     if st.session_state.game_state == 'input':
-        st.markdown("#### Enter your 10 predictions:")
+        st.markdown("#### Enter your 10 unique predictions (1-99):")
+        st.markdown("*Choose different numbers to maximize your chances!*")
         
         # Input fields for 10 numbers in a nice grid
         cols = st.columns(5)
@@ -74,19 +75,29 @@ def show_game_tab(supabase: Client, random_client: RandomOrgClient):
             with cols[col_idx]:
                 num = st.number_input(
                     f"#{i+1}", 
-                    min_value=1, 
+                    min_value=0, 
                     max_value=99, 
-                    value=1, 
-                    key=f"num_{i}"
+                    value=0,
+                    key=f"num_{i}",
+                    help="Choose a number between 1-99"
                 )
                 user_numbers.append(num)
         
-        # Check for duplicate predictions
-        unique_predictions = len(set(user_numbers))
-        if unique_predictions < 10:
-            st.warning(f"⚠️ You have only {unique_predictions} unique numbers. Duplicates won't increase your chances!")
+        # Check for invalid numbers (zeros) and duplicates
+        zeros_count = user_numbers.count(0)
+        valid_numbers = [n for n in user_numbers if n > 0]
+        unique_predictions = len(set(valid_numbers))
         
-        if st.button("🎲 Generate Random Numbers", type="primary", use_container_width=True):
+        if zeros_count > 0:
+            st.error(f"❌ Please choose numbers between 1-99 (you have {zeros_count} zeros)")
+        elif unique_predictions < len(valid_numbers):
+            st.warning(f"⚠️ You have only {unique_predictions} unique numbers. Duplicates won't increase your chances!")
+        elif len(valid_numbers) < 10:
+            st.error("❌ Please enter all 10 predictions")
+        
+        can_play = zeros_count == 0 and len(valid_numbers) == 10
+        
+        if st.button("🎲 Generate Random Numbers", type="primary", use_container_width=True, disabled=not can_play):
             try:
                 with st.spinner("🔮 Generating truly random numbers..."):
                     random_numbers = random_client.generate_random_numbers(10, 1, 99)
