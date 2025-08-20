@@ -64,7 +64,7 @@ def show_game_tab(supabase: Client, random_client: RandomOrgClient):
     # Phase 1: Number input
     if st.session_state.game_state == 'input':
         st.markdown("#### Enter your 10 unique predictions (1-99):")
-        st.markdown("*Choose different numbers to maximize your chances!*")
+        st.markdown("*We use the **Random.org API** to generate truly random numbers.*")
         
         # Input fields for 10 numbers in a nice grid
         cols = st.columns(5)
