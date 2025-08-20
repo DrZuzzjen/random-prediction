@@ -19,7 +19,7 @@ class RandomOrgClient:
                 "n": count,
                 "min": min_val,
                 "max": max_val,
-                "replacement": True
+                "replacement": False  # Ensure unique numbers (no duplicates)
             },
             "id": 1
         }
