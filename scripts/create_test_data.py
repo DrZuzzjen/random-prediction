@@ -18,13 +18,13 @@ def create_test_data():
     key = os.getenv("SUPABASE_SECRET_KEY")
     supabase: Client = create_client(url, key)
     
-    # Test users
+    # Test users - all emails normalized to lowercase
     test_users = [
-        {"name": "Alice Demo", "email": "alice@demo.com"},
-        {"name": "Bob Test", "email": "bob@demo.com"},
-        {"name": "Charlie Sample", "email": "charlie@demo.com"},
-        {"name": "Diana Example", "email": "diana@demo.com"},
-        {"name": "Eve Analytics", "email": "eve@demo.com"}
+        {"name": "Alice Demo", "email": "alice@demo.com".lower()},
+        {"name": "Bob Test", "email": "bob@demo.com".lower()},
+        {"name": "Charlie Sample", "email": "charlie@demo.com".lower()},
+        {"name": "Diana Example", "email": "diana@demo.com".lower()},
+        {"name": "Eve Analytics", "email": "eve@demo.com".lower()}
     ]
     
     # Generate game runs for each test user

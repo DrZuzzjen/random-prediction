@@ -9,9 +9,11 @@ from supabase import Client
 def save_game_run(supabase: Client, user_name, email, predictions, random_numbers, score, game_type="1-99_range_10_numbers"):
     """Save individual game run for analytics"""
     try:
+        # Normalize email to lowercase to ensure consistency
+        normalized_email = email.strip().lower()
         supabase.table('game_runs').insert({
             'user_name': user_name,
-            'email': email,
+            'email': normalized_email,
             'predictions': predictions,
             'random_numbers': random_numbers,
             'score': score,
@@ -25,7 +27,9 @@ def save_game_run(supabase: Client, user_name, email, predictions, random_number
 def update_leaderboard(supabase: Client, name, email, score, game_type="1-99_range_10_numbers"):
     """Update or create leaderboard entry"""
     try:
-        existing = supabase.table('leaderboard').select('*').eq('email', email).eq('game_type', game_type).execute()
+        # Normalize email to lowercase to ensure consistency
+        normalized_email = email.strip().lower()
+        existing = supabase.table('leaderboard').select('*').eq('email', normalized_email).eq('game_type', game_type).execute()
         
         if existing.data:
             current_best = existing.data[0]['best_score']
@@ -36,17 +40,17 @@ def update_leaderboard(supabase: Client, name, email, score, game_type="1-99_ran
                     'name': name,
                     'best_score': score,
                     'total_games_played': total_games
-                }).eq('email', email).eq('game_type', game_type).execute()
+                }).eq('email', normalized_email).eq('game_type', game_type).execute()
                 return True, "New high score!"
             else:
                 supabase.table('leaderboard').update({
                     'total_games_played': total_games
-                }).eq('email', email).eq('game_type', game_type).execute()
+                }).eq('email', normalized_email).eq('game_type', game_type).execute()
                 return False, f"Your best is still {current_best}/10"
         else:
             supabase.table('leaderboard').insert({
                 'name': name,
-                'email': email,
+                'email': normalized_email,
                 'best_score': score,
                 'total_games_played': 1,
                 'game_type': game_type
@@ -111,7 +115,9 @@ def get_number_frequencies(_supabase: Client, game_type="1-99_range_10_numbers")
 def get_user_analytics(_supabase: Client, email, game_type="1-99_range_10_numbers"):
     """Get user-specific analytics"""
     try:
-        runs = _supabase.table('game_runs').select('*').eq('email', email).eq('game_type', game_type).order('created_at', desc=True).execute()
+        # Normalize email to ensure consistent lookups
+        normalized_email = email.strip().lower()
+        runs = _supabase.table('game_runs').select('*').eq('email', normalized_email).eq('game_type', game_type).order('created_at', desc=True).execute()
         
         if not runs.data:
             return None
