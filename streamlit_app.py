@@ -253,6 +253,29 @@ def main():
         4. **See** your score!
         5. **Compete** on the leaderboard
         """)
+        
+        st.markdown("---")
+        st.markdown("### 🎲 Your Odds")
+        with st.expander("What are my chances?", expanded=False):
+            st.markdown("""
+            **Matching Probability:**
+            
+            **0/10**: 90.43%  
+            **1/10**: 9.14% *(1 in 11)*  
+            **2/10**: 0.42% *(1 in 237)*  
+            **3/10**: 0.012% *(1 in 8,600)*  
+            **4/10**: *(1 in 494K)*  
+            **5/10**: *(1 in 41M)*  
+            **6/10**: *(1 in 5B)*  
+            **7/10**: *(1 in 8.4×10¹⁵)*  
+            **8/10**: *(1 in 2×10¹⁸)*  
+            **9/10**: *(1 in 7×10¹⁹)*  
+            **10/10**: *(1 in 9×10¹⁹)*
+            
+            💡 **Fun fact**: You're more 
+            likely to win the lottery 
+            twice than get 10/10!
+            """)
     
     # Main content area with tabs
     st.title("🎯 Random Prediction Game")
